@@ -218,15 +218,12 @@ async def get_track_names(index_min: Optional[int] = None, index_max: Optional[i
 
     response = await ableton_client.send_rpc_request("send_message", params)
     if response['status'] == 'ok':
-        track_names = response['result'].get('status')
-        # Ici, j'ai mis 'status' car dans le daemon, on renvoie "result": {"status":"sent"} ou autre
-        # Mais si vous modifiez le daemon pour retourner vraiment les noms de pistes, changez la structure correspondante.
-        if not track_names:
-            return "No tracks found"
-        # Supposons qu'on reçoive un tableau de noms => adapter en conséquence
-        # track_names = ["Track1", "Track2", ...]
-        # ...
-        return f"Track Names: {track_names}"
+        result = response.get('result', {})
+        if isinstance(result, dict) and result.get('status') == 'success':
+            track_names = result.get('data', [])
+            if track_names:
+                return f"Track Names: {', '.join(track_names)}"
+        return "No tracks found"
     else:
         return f"Error getting track names: {response.get('message', 'Unknown error')}"
 

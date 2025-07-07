@@ -61,33 +61,38 @@ class AbletonOSCDaemon:
         print(f"Ableton OSC Daemon listening on {self.socket_host}:{self.socket_port}")
         print(f"OSC Server receiving on {self.socket_host}:{self.receive_port}")
         print(f"Sending to Ableton on {self.ableton_host}:{self.ableton_port}")
-        
+
         async with server:
             await server.serve_forever()
-            
+
     async def handle_socket_client(self, reader, writer):
         """Handle incoming socket connections from MCP server."""
         client_address = writer.get_extra_info('peername')
         print(f"[NEW CONNECTION] Client connected from {client_address}")
-        
+
         try:
             while True:
                 data = await reader.read(1024)
                 if not data:
                     break
-                    
+
                 try:
                     message = json.loads(data.decode())
                     print(f"[RECEIVED MESSAGE] From {client_address}: {message}")
-                    
-                    command = message.get('command')
 
-                    
-                    if command == 'send_message':
-                        # Extract OSC message details
+                    if 'method' in message:
+                        command = message.get('method')
+                        params = message.get('params', {})
+                        address = params.get('address')  # params の中から address を取得
+                        args = params.get('args', [])     # params の中から args を取得
+                    else:
+                        # 既存のフォーマット
+                        command = message.get('command')
                         address = message.get('address')
                         args = message.get('args', [])
-                        
+
+
+                    if command == 'send_message':
                         # For commands that expect responses, set up a future
                         if address.startswith(('/live/device/get', '/live/scene/get', '/live/view/get', '/live/clip/get', '/live/clip_slot/get', '/live/track/get', '/live/song/get', '/live/api/get', '/live/application/get', '/live/test', '/live/error')):
                             # Create response future with timeout
@@ -101,21 +106,40 @@ class AbletonOSCDaemon:
                                 # Wait for response with timeout
                                 response = await asyncio.wait_for(future, timeout=5.0)
                                 print(f"[OSC RESPONSE] Received: {response}")
-                                writer.write(json.dumps(response).encode())
+                                # JSONRPCフォーマットでラップ
+                                jsonrpc_response = {
+                                    "jsonrpc": "2.0",
+                                    "id": message.get('id'),
+                                    "result": response
+                                }
+                                writer.write(json.dumps(jsonrpc_response).encode())
                             except asyncio.TimeoutError:
                                 response = {
                                     'status': 'error',
                                     'message': f'Timeout waiting for response to {address}'
                                 }
                                 print(f"[OSC TIMEOUT] {response}")
-                                writer.write(json.dumps(response).encode())
-                                
+                                # JSONRPCフォーマットでラップ
+                                jsonrpc_response = {
+                                    "jsonrpc": "2.0",
+                                    "id": message.get('id'),
+                                    "error": {
+                                        "code": -32603,
+                                        "message": f'Timeout waiting for response to {address}'
+                                    }
+                                }
+                                writer.write(json.dumps(jsonrpc_response).encode())
+
                         else:
                             # For commands that don't expect responses
                             self.osc_client.send_message(address, args)
-                            response = {'status': 'sent'}
-                            writer.write(json.dumps(response).encode())
-                            
+                            jsonrpc_response = {
+                                "jsonrpc": "2.0",
+                                "id": message.get('id'),
+                                "result": {'status': 'sent'}
+                            }
+                            writer.write(json.dumps(jsonrpc_response).encode())
+
                     elif command == 'get_status':
                         response = {
                             'status': 'ok',
@@ -123,19 +147,32 @@ class AbletonOSCDaemon:
                             'receive_port': self.receive_port
                         }
                         print(f"[STATUS REQUEST] Responding with: {response}")
-                        writer.write(json.dumps(response).encode())
+                        # JSONRPCフォーマットでラップ
+                        jsonrpc_response = {
+                            "jsonrpc": "2.0",
+                            "id": message.get('id'),
+                            "result": response
+                        }
+                        writer.write(json.dumps(jsonrpc_response).encode())
                     else:
-                        response = {'status': 'error', 'message': 'Unknown command'}
                         print(f"[UNKNOWN COMMAND] Received: {message}")
-                        writer.write(json.dumps(response).encode())
-                    
+                        jsonrpc_response = {
+                            "jsonrpc": "2.0",
+                            "id": message.get('id'),
+                            "error": {
+                                "code": -32601,
+                                "message": "Unknown command"
+                            }
+                        }
+                        writer.write(json.dumps(jsonrpc_response).encode())
+
                     await writer.drain()
-                    
+
                 except json.JSONDecodeError:
                     print(f"[JSON ERROR] Could not decode message: {data}")
                     response = {'status': 'error', 'message': 'Invalid JSON'}
                     writer.write(json.dumps(response).encode())
-                    
+
         except Exception as e:
             print(f"[CONNECTION ERROR] Error handling client: {e}")
         finally:
