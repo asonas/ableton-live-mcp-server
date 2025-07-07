@@ -7,7 +7,7 @@ import json
 from typing import Optional, Dict, Any
 
 class AbletonOSCDaemon:
-    def __init__(self, 
+    def __init__(self,
                  socket_host='127.0.0.1', socket_port=65432,
                  ableton_host='127.0.0.1', ableton_port=11000,
                  receive_port=11001):
@@ -16,21 +16,21 @@ class AbletonOSCDaemon:
         self.ableton_host = ableton_host
         self.ableton_port = ableton_port
         self.receive_port = receive_port
-        
+
         # Initialize OSC client for Ableton
         self.osc_client = SimpleUDPClient(ableton_host, ableton_port)
-        
+
         # Store active connections waiting for responses
         self.pending_responses: Dict[str, asyncio.Future] = {}
-        
+
         # Initialize OSC server dispatcher
         self.dispatcher = Dispatcher()
         self.dispatcher.set_default_handler(self.handle_ableton_message)
-        
+
     def handle_ableton_message(self, address: str, *args):
         """Handle incoming OSC messages from Ableton."""
         print(f"[ABLETON MESSAGE] Address: {address}, Args: {args}")
-        
+
         # If this address has a pending response, resolve it
         if address in self.pending_responses:
             future = self.pending_responses[address]
@@ -41,7 +41,7 @@ class AbletonOSCDaemon:
                     'data': args
                 })
             del self.pending_responses[address]
-            
+
     async def start(self):
         """Start both the socket server and OSC server."""
         # Start OSC server to receive Ableton messages
@@ -51,7 +51,7 @@ class AbletonOSCDaemon:
             asyncio.get_event_loop()
         )
         await self.osc_server.create_serve_endpoint()
-        
+
         # Start socket server for MCP communication
         server = await asyncio.start_server(
             self.handle_socket_client,

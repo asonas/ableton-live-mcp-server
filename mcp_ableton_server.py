@@ -14,7 +14,7 @@ class AbletonClient:
         self.responses = {}  # Store futures keyed by (request_id)
         self.lock = asyncio.Lock()
         self._request_id = 0  # compteur pour générer des ids uniques
-        
+
         # Task asynchrone pour lire les réponses
         self.response_task = None
 
@@ -73,7 +73,7 @@ class AbletonClient:
             try:
                 self.sock.connect((self.host, self.port))
                 self.connected = True
-                
+
                 # Start the response reader task
                 self.response_task = asyncio.create_task(self.start_response_reader())
                 return True
@@ -135,11 +135,11 @@ class AbletonClient:
             return {'status': 'error', 'message': str(e)}
     """
     def send_rpc_command_sync(self, method: str, params: dict) -> dict:
-        
+
         # Variante synchrone pour juste envoyer le message
         # et lire UNE réponse immédiatement (fonctionne si
         # le daemon renvoie une unique réponse).
-        
+
         if not self.connected:
             if not self.connect():
                 return {'status': 'error', 'message': 'Not connected'}
@@ -200,11 +200,11 @@ ableton_client = AbletonClient()
 async def get_track_names(index_min: Optional[int] = None, index_max: Optional[int] = None) -> str:
     """
     Get the names of tracks in Ableton Live.
-    
+
     Args:
         index_min: Optional minimum track index
         index_max: Optional maximum track index
-    
+
     Returns:
         A formatted string containing track names
     """
