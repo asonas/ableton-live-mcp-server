@@ -317,6 +317,82 @@ async def create_midi_clip(track_id: int, length: float = 4.0) -> str:
         return f"Error creating MIDI clip: {response.get('message', 'Unknown error')}"
 
 @mcp.tool()
+async def get_tempo() -> str:
+    """
+    Get the current tempo (BPM) of the Ableton Live song.
+
+    Returns:
+        The current tempo in BPM or error message
+    """
+    params = {
+        "address": "/live/song/get/tempo",
+        "args": []
+    }
+
+    response = await ableton_client.send_rpc_request("send_message", params)
+    if response['status'] == 'ok':
+        result = response.get('result', {})
+        if isinstance(result, dict) and result.get('status') == 'success':
+            tempo = result.get('data')
+            if tempo is not None:
+                return f"Current tempo: {tempo} BPM"
+        return "Unable to get tempo"
+    else:
+        return f"Error getting tempo: {response.get('message', 'Unknown error')}"
+
+@mcp.tool()
+async def set_tempo(tempo: float) -> str:
+    """
+    Set the tempo (BPM) of the Ableton Live song.
+
+    Args:
+        tempo: The tempo in BPM (20.0 - 999.0)
+
+    Returns:
+        Success or error message
+    """
+    # Validate tempo range
+    if tempo < 20.0 or tempo > 999.0:
+        return f"Error: Tempo must be between 20.0 and 999.0 BPM (got {tempo})"
+
+    params = {
+        "address": "/live/song/set/tempo",
+        "args": [tempo]
+    }
+
+    response = await ableton_client.send_rpc_request("send_message", params)
+    if response['status'] == 'ok':
+        return f"Successfully set tempo to {tempo} BPM"
+    else:
+        return f"Error setting tempo: {response.get('message', 'Unknown error')}"
+
+@mcp.tool()
+async def set_track_name(track_id: int, name: str) -> str:
+    """
+    Set the name of a track in Ableton Live.
+
+    Args:
+        track_id: Track index (0-based)
+        name: The new name for the track
+
+    Returns:
+        Success or error message
+    """
+    if not name.strip():
+        return "Error: Track name cannot be empty"
+
+    params = {
+        "address": "/live/track/set/name",
+        "args": [track_id, name]
+    }
+
+    response = await ableton_client.send_rpc_request("send_message", params)
+    if response['status'] == 'ok':
+        return f"Successfully set track {track_id} name to '{name}'"
+    else:
+        return f"Error setting track name: {response.get('message', 'Unknown error')}"
+
+@mcp.tool()
 async def create_drum_pattern(track_id: int, clip_id: int, pattern_type: str = "eight_beat", bars: int = 1) -> str:
     """
     Create a drum pattern in Ableton Live.
