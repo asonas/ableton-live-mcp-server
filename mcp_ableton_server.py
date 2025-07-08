@@ -294,25 +294,52 @@ async def remove_midi_notes(track_id: int, clip_id: int, pitch_start: Optional[i
         return f"Error removing MIDI notes: {response.get('message', 'Unknown error')}"
 
 @mcp.tool()
-async def create_midi_clip(track_id: int, length: float = 4.0) -> str:
+async def create_midi_clip(track_id: int, clip_id: int = 0, length: float = 4.0, replace_existing: bool = False) -> str:
     """
     Create a new MIDI clip in Ableton Live.
 
     Args:
         track_id: Track index (0-based)
+        clip_id: Clip index (0-based, default 0)
         length: Clip length in beats (default 4.0)
+        replace_existing: If True, delete existing clip before creating new one
 
     Returns:
         Success or error message
     """
+    # Check if clip already exists
+    check_params = {
+        "address": "/live/clip_slot/get/has_clip",
+        "args": [track_id, clip_id]
+    }
+
+    check_response = await ableton_client.send_rpc_request("send_message", check_params)
+    if check_response['status'] == 'ok':
+        result = check_response.get('result', {})
+        if isinstance(result, dict) and result.get('status') == 'success':
+            has_clip_data = result.get('data')
+            if has_clip_data:
+                if replace_existing:
+                    # Delete existing clip first
+                    delete_params = {
+                        "address": "/live/clip_slot/delete_clip",
+                        "args": [track_id, clip_id]
+                    }
+                    delete_response = await ableton_client.send_rpc_request("send_message", delete_params)
+                    if delete_response['status'] != 'ok':
+                        return f"Error deleting existing clip: {delete_response.get('message', 'Unknown error')}"
+                else:
+                    return f"Clip already exists at track {track_id}, clip slot {clip_id}. Use replace_existing=True to overwrite."
+
+    # Create new clip
     params = {
         "address": "/live/clip_slot/create_clip",
-        "args": [track_id, 0, length]
+        "args": [track_id, clip_id, length]
     }
 
     response = await ableton_client.send_rpc_request("send_message", params)
     if response['status'] == 'ok':
-        return f"Successfully created MIDI clip on track {track_id} with length {length} beats"
+        return f"Successfully created MIDI clip on track {track_id}, clip slot {clip_id} with length {length} beats"
     else:
         return f"Error creating MIDI clip: {response.get('message', 'Unknown error')}"
 
@@ -391,6 +418,57 @@ async def set_track_name(track_id: int, name: str) -> str:
         return f"Successfully set track {track_id} name to '{name}'"
     else:
         return f"Error setting track name: {response.get('message', 'Unknown error')}"
+
+@mcp.tool()
+async def has_clip(track_id: int, clip_id: int) -> str:
+    """
+    Check if a clip slot has a clip in Ableton Live.
+
+    Args:
+        track_id: Track index (0-based)
+        clip_id: Clip index (0-based)
+
+    Returns:
+        Whether the clip slot has a clip or error message
+    """
+    params = {
+        "address": "/live/clip_slot/get/has_clip",
+        "args": [track_id, clip_id]
+    }
+
+    response = await ableton_client.send_rpc_request("send_message", params)
+    if response['status'] == 'ok':
+        result = response.get('result', {})
+        if isinstance(result, dict) and result.get('status') == 'success':
+            has_clip_data = result.get('data')
+            if has_clip_data is not None:
+                return f"Track {track_id}, Clip {clip_id} has clip: {has_clip_data}"
+        return f"Unable to check clip existence for track {track_id}, clip {clip_id}"
+    else:
+        return f"Error checking clip existence: {response.get('message', 'Unknown error')}"
+
+@mcp.tool()
+async def delete_clip(track_id: int, clip_id: int) -> str:
+    """
+    Delete a clip from a clip slot in Ableton Live.
+
+    Args:
+        track_id: Track index (0-based)
+        clip_id: Clip index (0-based)
+
+    Returns:
+        Success or error message
+    """
+    params = {
+        "address": "/live/clip_slot/delete_clip",
+        "args": [track_id, clip_id]
+    }
+
+    response = await ableton_client.send_rpc_request("send_message", params)
+    if response['status'] == 'ok':
+        return f"Successfully deleted clip from track {track_id}, clip slot {clip_id}"
+    else:
+        return f"Error deleting clip: {response.get('message', 'Unknown error')}"
 
 @mcp.tool()
 async def create_drum_pattern(track_id: int, clip_id: int, pattern_type: str = "eight_beat", bars: int = 1) -> str:
